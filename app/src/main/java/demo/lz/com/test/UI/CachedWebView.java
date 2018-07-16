@@ -1,14 +1,20 @@
 package demo.lz.com.test.UI;
 
+import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.Build;
+import android.support.annotation.Nullable;
+import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-import java.io.File;
+import demo.lz.com.test.Cache.DiskWebResourseCache;
+import demo.lz.com.test.MD5Utls;
 
 /**
  * Created by Administrator on 2018/7/10.
@@ -20,8 +26,10 @@ public class CachedWebView extends WebView {
     private int    adpterPos = -1;
     private String mUrl      = "";
     private ResultCallback mCallback;
-    private boolean isIdle      = true;
-    private long    idleTimeOut = 60000;
+    private boolean isIdle         = true;
+    private boolean shouldKillself = false;
+    private long    idleTimeOut    = 60000;
+
 
     public CachedWebView(Context context) {
         this(context, null);
@@ -39,16 +47,13 @@ public class CachedWebView extends WebView {
         //缓存地址
         String cacheDir = context.getFilesDir().getAbsolutePath();
 
-        if (!new File(cacheDir).exists()) {
-            new File(cacheDir).mkdirs();
-        }
+
         mWebSettings.setAppCachePath(cacheDir);
-        //缓存最大容量
-        mWebSettings.setAppCacheMaxSize(10 * 1024 * 1024);
         mWebSettings.setDomStorageEnabled(true);
         mWebSettings.setAllowFileAccess(true);
         mWebSettings.setAppCacheEnabled(true);
         mWebSettings.setDatabaseEnabled(true);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             mWebSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
@@ -68,6 +73,34 @@ public class CachedWebView extends WebView {
                 reset();
             }
 
+            @TargetApi(Build.VERSION_CODES.LOLLIPOP)
+            @Nullable
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                //获取本地的URL主域名
+                String domain = request.getUrl().getHost();
+                //取不到domain直接返回
+
+                if (domain == null) {
+                    return null;
+                }
+                Log.e(TAG, "shouldInterceptRequest: "+url );
+                try {
+                    //MD5
+                    String resFileName = MD5Utls.stringToMD5(url);
+                    if (TextUtils.isEmpty(resFileName)) {
+                        return null;
+                    }
+
+                    return DiskWebResourseCache.getInstance().loadWebResource(url, resFileName,
+                            request.getRequestHeaders().get("Accept"), "UTF-8", DiskWebResourseCache.DEFAULT_MaxCacheTime);
+                } catch (Exception e) {
+                    Log.e(TAG, "shouldInterceptRequest: 异常" + e.getMessage());
+                }
+
+                return super.shouldInterceptRequest(view, request);
+            }
         });
 
     }
@@ -91,16 +124,18 @@ public class CachedWebView extends WebView {
      * 重置webview
      */
     public void reset() {
-//        removeAllViews();
         adpterPos = -1;
         mUrl = "";
         isIdle = true;
-        postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                release();
-            }
-        }, idleTimeOut);
+        if (shouldKillself) {
+            postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    release();
+                }
+            }, idleTimeOut);
+        }
+
     }
 
     /**
@@ -117,6 +152,10 @@ public class CachedWebView extends WebView {
      */
     public boolean isIdle() {
         return isIdle;
+    }
+
+    public void setShouldKillself(boolean shouldKillself) {
+        this.shouldKillself = shouldKillself;
     }
 
     public interface ResultCallback {

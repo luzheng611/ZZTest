@@ -1,8 +1,11 @@
 package demo.lz.com.test;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
@@ -25,14 +28,26 @@ public class MainActivity extends AppCompatActivity {
     private RecyclerView             mRecyclerView;
     private ItemAdapter              mItemAdapter;
     private ArrayList<CachedWebView> mCachedWebViews;
-
+    private boolean hasDoIntervalFirst = false;
+    private String[] permissions=new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE,Manifest.permission.READ_EXTERNAL_STORAGE};
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         initView();
+    }
 
-
+    private boolean applyForPermission() {
+        if(Build.VERSION.SDK_INT>=23){
+            for(int i=0;i<permissions.length;i++){
+                int granted=checkSelfPermission(permissions[i]);
+                if(granted!= PackageManager.PERMISSION_GRANTED){
+                    requestPermissions(permissions,666);
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void initView() {
@@ -74,7 +89,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        doInterval();
+        if (!hasDoIntervalFirst&& applyForPermission()) {
+            doInterval();
+        }
     }
 
     /**
@@ -101,6 +118,7 @@ public class MainActivity extends AppCompatActivity {
 
                 if (cachedWebView == null) {
                     cachedWebView = new CachedWebView(MainActivity.this);
+                    cachedWebView.setShouldKillself(true);
                 }
 
 
@@ -143,6 +161,7 @@ public class MainActivity extends AppCompatActivity {
      * 将静止三秒后的任务放入队列
      */
     private void doInterval() {
+        hasDoIntervalFirst=true;
         mRecyclerView.postDelayed(mainRunnable, 3000);
     }
 
@@ -159,6 +178,15 @@ public class MainActivity extends AppCompatActivity {
         return datas;
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(requestCode==666){
+            if(!hasDoIntervalFirst){
+                doInterval();
+            }
+        }
+    }
 
     /**
      * 列表适配器
